@@ -12,13 +12,14 @@ import tempfile
 import pandas as pd
 import numpy as np
 import plotly.express as px
-from PyQt5.QtWidgets import QApplication, QFileDialog, QVBoxLayout, QWidget
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+import plotly.graph_objects as pgo
 from PyQt5.QtCore import QUrl
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWidgets import QApplication, QFileDialog, QVBoxLayout, QWidget, QMainWindow
 
 
 
-class GraphDataDashboardExplorer:
+class GraphDataDashboardExplorer():
     def __init__(self):
         self.filePath = None
         self.data = []
@@ -78,19 +79,16 @@ class GraphDataDashboardExplorer:
 
 
 #PyQt plotting application
-class ScaleLinePlot:
-    def __init__(self, html_path):
+class ScaleLinePlot(QMainWindow):  # Inherit from QMainWindow
+    def __init__(self, df):
+        super().__init__()  # Calls QMainWindow constructor
 
-        self.html_path = html_path
-        #calls __init__ method, initializes QMainWindow in PyQt
-        super().__init__()
+        self.df = df
 
         self.setWindowTitle("Pump Scale Data")
-        #sets the size of the window (x-coord, y-coord, window width, windo height
         self.setGeometry(100, 100, 800, 600)
 
         self.browser = QWebEngineView()
-        self.browser.load(QUrl.fromLocalFile(html_path)) 
 
         container = QWidget()
         layout = QVBoxLayout()
@@ -98,8 +96,39 @@ class ScaleLinePlot:
         container.setLayout(layout)
         self.setCentralWidget(container)
 
+        #call derivativeZero for calculating and plotting where the derivative changes from positive to negative
+        self.derivativeZero(self.df['Weight'], self.df['timeRawSec'])  # Plot on load
 
-            
+    #for finding where the scale data in a the dataframe has a derivative = 0. This signifies a change in graph direction (or inflection point). 
+    #The tolerance of the derivative funtion is controlled by the epsilon vale (+/- epsilon is the tolerance)
+    #plots the locations of derivative inflection points
+    def derivativeZero(self, column: pd.Series, time_column: pd.Series, epsilon: float = 1e-4):
+        
+        #determine the derivative of the time series scale data, imported as pd.Series
+        derivative = column.diff()
+
+        #find where the derivative is close to zero using epsilon as the tolerance
+        zero_indices = derivative[derivative.abs() < epsilon].index
+
+        #determing the time (x) and scale weight (y) values at which the zero indices exist
+        x_zero = time_column.loc[zero_indices]
+        y_zero = column.loc[zero_indices]
+
+        #create base plot
+        fig = pgo.Figure()
+        fig.add_trace(pgo.Scatter(x=time_column, y=column, mode='lines', name='Original Data'))
+
+        #add the points where the derivative equals zero
+        fig.add_trace(pgo.Scatter(x=x_zero, y=y_zero, mode='markers', name='Zero Derivative',
+                                 marker=dict(color='red', size=8, symbol='circle')))
+
+        fig.update_layout(title='Weight Over Time with Zero Derivative Points',
+                          xaxis_title='Time (s)', yaxis_title='Weight')
+
+        #display plot
+        html_path = tempfile.NamedTemporaryFile(delete=False, suffix='.html').name
+        fig.write_html(html_path)
+        self.browser.load(QUrl.fromLocalFile(html_path))    
             
             
 

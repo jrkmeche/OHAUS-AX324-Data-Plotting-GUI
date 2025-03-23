@@ -11,7 +11,7 @@ from GraphDataDashboard import GraphDataDashboardExplorer
 import sys
 import tempfile
 import plotly.express as px
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from GraphDataDashboard import ScaleLinePlot
 from GraphDataDashboard import GraphDataDashboardExplorer
 
@@ -21,17 +21,21 @@ file_path, data, df = fileSelector.selectFile()
 
 if df is not None:
     print(df.head())
+    app = QApplication(sys.argv)
+    viewer = ScaleLinePlot(df)
+    viewer.show()
+    sys.exit(app.exec_())
 else:
     print("No file selected or data could not be processed")
 
-fig = px.line(df, x='timeRawSec', y='Weight', title='Weight over Time (Seconds)')
+""" fig = px.line(df, x='timeRawSec', y='Weight', title='Weight over Time (Seconds)')
 html_path = tempfile.NamedTemporaryFile(delete=False, suffix='.html').name
 fig.write_html(html_path)
 
 app = QApplication(sys.argv)
 viewer = ScaleLinePlot(html_path)
 viewer.show()
-sys.exit(app.exec_())
+sys.exit(app.exec_()) """
 
 
 """ 
