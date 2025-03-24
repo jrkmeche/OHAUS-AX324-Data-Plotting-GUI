@@ -21,40 +21,56 @@ from PyQt5.QtWidgets import QApplication, QFileDialog, QVBoxLayout, QWidget, QMa
 
 class GraphDataDashboardExplorer():
     def __init__(self):
-        self.filePath = None
+        self.filePaths = []  # Multiple files
         self.data = []
         self.df = None
 
-
-    #allow the user to browse to a file in the file explorer to process
-    #only works with .txt extions from an XXXX scale
     def selectFile(self):
+        """
+        Opens a file dialog to select multiple text files,
+        processes each file, and combines the results into one DataFrame.
+        """
         app = QApplication(sys.argv)
         fileExplore = QFileDialog()
-        self.filePath, _ = fileExplore.getOpenFileName(None, "Select a file")
+        self.filePaths, _ = fileExplore.getOpenFileNames(
+            None, "Select one or more files", "", "Text Files (*.txt)"
+        )
         app.quit()
 
-        if not self.filePath:
-            print("File not selected")
-            return None
-        
-        self._processData()
-        return self.filePath, self.data, self.df
+        if not self.filePaths:
+            print("No files selected")
+            return None, None, None
 
-    def _processData(self):
-        with open(self.filePath, 'r') as file:
+        all_data = []
+        for path in self.filePaths:
+            file_data = self._processData(path)
+            all_data.extend(file_data)
+
+        if all_data:
+            self.df = pd.DataFrame(all_data)
+            self.df["timeRawSec"] = [i * 10 for i in range(len(self.df))]
+            self.df["timeRawMin"] = (self.df["timeRawSec"] / 60).round(2)
+            return self.filePaths, all_data, self.df
+
+        return None, None, None
+    
+
+    #removes raw syntax from .txt selected by the user
+    #returns processed data as a list. Globally muted and only used within this class
+    def _processData(self, file_path):
+        import os
+
+        with open(file_path, 'r') as file:
             content = ''.join(file.readlines())
-        
+
         scaleReading = content.strip().split("\n\n")
-        self.data = []
+        data = []
+        file_label = os.path.basename(file_path)
 
         for weight in scaleReading:
             lines = weight.strip().split("\n")
             if len(lines) < 2:
                 continue
-
-            date, time = lines[0].split()
-            net_lines_parts = lines[1].split()
 
             try:
                 date, time = lines[0].split()
@@ -64,17 +80,16 @@ class GraphDataDashboardExplorer():
             except (IndexError, ValueError):
                 continue
 
-            self.data.append({
+            data.append({
                 "Date": date,
                 "Time": time,
                 "Weight": net_value,
-                "Unit": unit
+                "Unit": unit,
+                "SourceFile": file_label  # 🆕 tag with filename
             })
 
-        if self.data:
-            self.df = pd.DataFrame(self.data)
-            self.df["timeRawSec"] = [i * 10 for i in range(len(self.df))]
-            self.df["timeRawMin"] = (self.df["timeRawSec"] / 60).round(2)      
+        return data
+
 
 
 
@@ -103,32 +118,48 @@ class ScaleLinePlot(QMainWindow):  # Inherit from QMainWindow
     #The tolerance of the derivative funtion is controlled by the epsilon vale (+/- epsilon is the tolerance)
     #plots the locations of derivative inflection points
     def derivativeZero(self, column: pd.Series, time_column: pd.Series, epsilon: float = 1e-4):
-        
-        #determine the derivative of the time series scale data, imported as pd.Series
-        derivative = column.diff()
+        import plotly.graph_objects as go
+        import tempfile
 
-        #find where the derivative is close to zero using epsilon as the tolerance
-        zero_indices = derivative[derivative.abs() < epsilon].index
+        fig = go.Figure()
 
-        #determing the time (x) and scale weight (y) values at which the zero indices exist
-        x_zero = time_column.loc[zero_indices]
-        y_zero = column.loc[zero_indices]
+        for file_name in self.df['SourceFile'].unique():
+            df_subset = self.df[self.df['SourceFile'] == file_name].copy()
 
-        #create base plot
-        fig = pgo.Figure()
-        fig.add_trace(pgo.Scatter(x=time_column, y=column, mode='lines', name='Original Data'))
+            # Reset time to start at 0 and increment by 10s per point
+            df_subset = df_subset.reset_index(drop=True)
+            df_subset['AlignedTime'] = df_subset.index * 10
 
-        #add the points where the derivative equals zero
-        fig.add_trace(pgo.Scatter(x=x_zero, y=y_zero, mode='markers', name='Zero Derivative',
-                                 marker=dict(color='red', size=8, symbol='circle')))
+            # Plot line
+            fig.add_trace(go.Scatter(
+                x=df_subset['AlignedTime'],
+                y=df_subset['Weight'],
+                mode='lines',
+                name=f'{file_name}'
+            ))
 
-        fig.update_layout(title='Weight Over Time with Zero Derivative Points',
-                          xaxis_title='Time (s)', yaxis_title='Weight')
+            # Compute and plot zero-derivative points
+            derivative = df_subset['Weight'].diff()
+            zero_indices = derivative[derivative.abs() < epsilon].index
+            x_zero = df_subset['AlignedTime'].loc[zero_indices]
+            y_zero = df_subset['Weight'].loc[zero_indices]
 
-        #display plot
+            fig.add_trace(go.Scatter(
+                x=x_zero,
+                y=y_zero,
+                mode='markers',
+                name=f'{file_name} Zero Deriv',
+                marker=dict(color='red', size=8, symbol='circle')
+            ))
+
+        fig.update_layout(title='Scale Plots (All Start at t=0)',
+                        xaxis_title='Time (s)', yaxis_title='Weight (g)')
+
         html_path = tempfile.NamedTemporaryFile(delete=False, suffix='.html').name
         fig.write_html(html_path)
-        self.browser.load(QUrl.fromLocalFile(html_path))    
+        self.browser.load(QUrl.fromLocalFile(html_path))
+    
+
             
             
 
