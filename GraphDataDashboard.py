@@ -1,73 +1,47 @@
-#-----object for the user interface-----
-#----------has functions----------------
-#----------------selectFile-------------
-
-
-#allow the user to browse to a file in the file explorer to process
-#only works with .txt extions that were recorded from a XXXXX scale
-
-
 import sys
+import os
 import tempfile
 import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as pgo
+import plotly.graph_objects as go
 from PyQt5.QtCore import QUrl
-from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import QApplication, QFileDialog, QVBoxLayout, QWidget, QMainWindow
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 
-
-class GraphDataDashboardExplorer():
-    def __init__(self):
-        self.filePaths = []  # Multiple files
-        self.data = []
-        self.df = None
-
-    def selectFile(self):
-        """
-        Opens a file dialog to select multiple text files,
-        processes each file, and combines the results into one DataFrame.
-        """
+class FileSelector:
+    def select_files(self):
         app = QApplication(sys.argv)
-        fileExplore = QFileDialog()
-        self.filePaths, _ = fileExplore.getOpenFileNames(
+        file_dialog = QFileDialog()
+        file_paths, _ = file_dialog.getOpenFileNames(
             None, "Select one or more files", "", "Text Files (*.txt)"
         )
         app.quit()
+        return file_paths if file_paths else None
 
-        if not self.filePaths:
-            print("No files selected")
-            return None, None, None
 
+class ScaleDataProcessor:
+    def __init__(self, file_paths):
+        self.file_paths = file_paths
+
+    def process_all(self):
         all_data = []
-        for path in self.filePaths:
-            file_data = self._processData(path)
-            all_data.extend(file_data)
+        for path in self.file_paths:
+            all_data.extend(self._process_single(path))
 
-        if all_data:
-            self.df = pd.DataFrame(all_data)
-            self.df["timeRawSec"] = [i * 10 for i in range(len(self.df))]
-            self.df["timeRawMin"] = (self.df["timeRawSec"] / 60).round(2)
-            return self.filePaths, all_data, self.df
+        df = pd.DataFrame(all_data)
+        df["timeRawSec"] = [i * 10 for i in range(len(df))]
+        df["timeRawMin"] = (df["timeRawSec"] / 60).round(2)
+        return df
 
-        return None, None, None
-    
-
-    #removes raw syntax from .txt selected by the user
-    #returns processed data as a list. Globally muted and only used within this class
-    def _processData(self, file_path):
-        import os
-
+    def _process_single(self, file_path):
         with open(file_path, 'r') as file:
             content = ''.join(file.readlines())
 
-        scaleReading = content.strip().split("\n\n")
+        scale_readings = content.strip().split("\n\n")
         data = []
         file_label = os.path.basename(file_path)
 
-        for weight in scaleReading:
+        for weight in scale_readings:
             lines = weight.strip().split("\n")
             if len(lines) < 2:
                 continue
@@ -85,52 +59,25 @@ class GraphDataDashboardExplorer():
                 "Time": time,
                 "Weight": net_value,
                 "Unit": unit,
-                "SourceFile": file_label  # 🆕 tag with filename
+                "SourceFile": file_label
             })
 
         return data
 
 
-
-
-#PyQt plotting application
-class ScaleLinePlot(QMainWindow):  # Inherit from QMainWindow
-    def __init__(self, df):
-        super().__init__()  # Calls QMainWindow constructor
-
+class DerivativePlotter:
+    def __init__(self, df, epsilon=1e-4):
         self.df = df
+        self.epsilon = epsilon
 
-        self.setWindowTitle("Pump Scale Data")
-        self.setGeometry(100, 100, 800, 600)
-
-        self.browser = QWebEngineView()
-
-        container = QWidget()
-        layout = QVBoxLayout()
-        layout.addWidget(self.browser)
-        container.setLayout(layout)
-        self.setCentralWidget(container)
-
-        #call derivativeZero for calculating and plotting where the derivative changes from positive to negative
-        self.derivativeZero(self.df['Weight'], self.df['timeRawSec'])  # Plot on load
-
-    #for finding where the scale data in a the dataframe has a derivative = 0. This signifies a change in graph direction (or inflection point). 
-    #The tolerance of the derivative funtion is controlled by the epsilon vale (+/- epsilon is the tolerance)
-    #plots the locations of derivative inflection points
-    def derivativeZero(self, column: pd.Series, time_column: pd.Series, epsilon: float = 1e-4):
-        import plotly.graph_objects as go
-        import tempfile
-
+    def build_plot(self):
         fig = go.Figure()
 
         for file_name in self.df['SourceFile'].unique():
             df_subset = self.df[self.df['SourceFile'] == file_name].copy()
-
-            # Reset time to start at 0 and increment by 10s per point
             df_subset = df_subset.reset_index(drop=True)
             df_subset['AlignedTime'] = df_subset.index * 10
 
-            # Plot line
             fig.add_trace(go.Scatter(
                 x=df_subset['AlignedTime'],
                 y=df_subset['Weight'],
@@ -138,9 +85,8 @@ class ScaleLinePlot(QMainWindow):  # Inherit from QMainWindow
                 name=f'{file_name}'
             ))
 
-            # Compute and plot zero-derivative points
             derivative = df_subset['Weight'].diff()
-            zero_indices = derivative[derivative.abs() < epsilon].index
+            zero_indices = derivative[derivative.abs() < self.epsilon].index
             x_zero = df_subset['AlignedTime'].loc[zero_indices]
             y_zero = df_subset['Weight'].loc[zero_indices]
 
@@ -153,14 +99,52 @@ class ScaleLinePlot(QMainWindow):  # Inherit from QMainWindow
             ))
 
         fig.update_layout(title='Scale Plots (All Start at t=0)',
-                        xaxis_title='Time (s)', yaxis_title='Weight (g)')
+                          xaxis_title='Time (s)', yaxis_title='Weight (g)')
+        return fig
 
+
+class ScaleLinePlotUI(QMainWindow):
+    def __init__(self, df):
+        super().__init__()
+        self.df = df
+        self.setWindowTitle("Pump Scale Data")
+        self.setGeometry(100, 100, 800, 600)
+
+        self.browser = QWebEngineView()
+        layout = QVBoxLayout()
+        layout.addWidget(self.browser)
+
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+        self.show_plot()
+
+    def show_plot(self):
+        plotter = DerivativePlotter(self.df)
+        fig = plotter.build_plot()
         html_path = tempfile.NamedTemporaryFile(delete=False, suffix='.html').name
         fig.write_html(html_path)
         self.browser.load(QUrl.fromLocalFile(html_path))
-    
 
-            
-            
 
-    
+class DashboardApp:
+    def run(self):
+        file_selector = FileSelector()
+        file_paths = file_selector.select_files()
+
+        if not file_paths:
+            print("No file selected")
+            return
+
+        processor = ScaleDataProcessor(file_paths)
+        df = processor.process_all()
+
+        app = QApplication(sys.argv)
+        viewer = ScaleLinePlotUI(df)
+        viewer.show()
+        sys.exit(app.exec_())
+
+
+if __name__ == "__main__":
+    DashboardApp().run()
