@@ -126,6 +126,17 @@ document.addEventListener('DOMContentLoaded', function () {
             const pt = data.points[0];
             selectedPoints.push({ x: pt.x, y: pt.y });
 
+            if (selectedPoints.length === 1) {
+                // Plot first selected point
+                Plotly.addTraces('plot', {
+                    x: [pt.x],
+                    y: [pt.y],
+                    mode: 'markers',
+                    marker: { color: 'red', size: 10 },
+                    name: 'Selected Point'
+                });
+            }
+
             if (selectedPoints.length === 2) {
                 const dx = selectedPoints[1].x - selectedPoints[0].x;
                 const dy = selectedPoints[1].y - selectedPoints[0].y;
@@ -134,7 +145,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const annotation = {
                     x: (selectedPoints[0].x + selectedPoints[1].x) / 2,
                     y: (selectedPoints[0].y + selectedPoints[1].y) / 2,
-                    text: 'Weight Drift: ' + dy.toFixed(6) + ' grams in ' + dx +' seconds',
+                    text: 'Weight Drift: ' + dy.toFixed(6) + ' grams in ' + dx + ' seconds',
                     showarrow: true,
                     arrowhead: 3,
                     ax: 0,
@@ -143,9 +154,24 @@ document.addEventListener('DOMContentLoaded', function () {
                     bordercolor: "black"
                 };
 
-                Plotly.relayout('plot', {
-                    annotations: [annotation]
-                });
+                const line = {
+                    x: [selectedPoints[0].x, selectedPoints[1].x],
+                    y: [selectedPoints[0].y, selectedPoints[1].y],
+                    mode: 'lines',
+                    line: { color: 'red', dash: 'dash' },
+                    name: 'Slope Line'
+                };
+
+                const newPointTrace = {
+                    x: [selectedPoints[1].x],
+                    y: [selectedPoints[1].y],
+                    mode: 'markers',
+                    marker: { color: 'red', size: 10 },
+                    name: 'Selected Point'
+                };
+
+                Plotly.addTraces('plot', [line, newPointTrace]);
+                Plotly.relayout('plot', { annotations: [annotation] });
 
                 selectedPoints = [];
             }
@@ -154,6 +180,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 """
+
             html = html.replace("</body>", custom_js + "\n</body>")
 
             with open("slope_plot.html", "w") as f:
