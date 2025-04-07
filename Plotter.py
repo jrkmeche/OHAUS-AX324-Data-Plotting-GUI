@@ -21,6 +21,7 @@ class DerivativePlotter:
             ))
             
             
+            #derivative stuff, need to fix
             #derivative = df_subset['Weight'].diff()
             #zero_indices = derivative[derivative.abs() < self.epsilon].index
             #x_zero = df_subset['AlignedTime'].loc[zero_indices]

@@ -121,62 +121,56 @@ let selectedPoints = [];
 document.addEventListener('DOMContentLoaded', function () {
     const plotDiv = document.getElementById('plot');
 
-    plotDiv.on('plotly_click', function(data) {
-        if (data.points.length > 0) {
-            const pt = data.points[0];
-            selectedPoints.push({ x: pt.x, y: pt.y });
+ plotDiv.on('plotly_click', function(data) {
+    if (data.points.length > 0) {
+        const pt = data.points[0];
+        selectedPoints.push({ x: pt.x, y: pt.y });
 
-            if (selectedPoints.length === 1) {
-                // Plot first selected point
-                Plotly.addTraces('plot', {
-                    x: [pt.x],
-                    y: [pt.y],
-                    mode: 'markers',
-                    marker: { color: 'red', size: 10 },
-                    name: 'Selected Point'
-                });
-            }
+        if (selectedPoints.length === 2) {
+            const [pt1, pt2] = selectedPoints;
+            const dx = pt2.x - pt1.x;
+            const dy = pt2.y - pt1.y;
+            const slope = dy / dx;
 
-            if (selectedPoints.length === 2) {
-                const dx = selectedPoints[1].x - selectedPoints[0].x;
-                const dy = selectedPoints[1].y - selectedPoints[0].y;
-                const slope = dy / dx;
+            const annotation = {
+                x: (pt1.x + pt2.x) / 2,
+                y: (pt1.y + pt2.y) / 2,
+                text: 'Weight Drift: ' + dy.toFixed(6) + ' grams in ' + dx + ' seconds',
+                showarrow: true,
+                arrowhead: 3,
+                ax: 0,
+                ay: -40,
+                bgcolor: "lightyellow",
+                bordercolor: "black"
+            };
 
-                const annotation = {
-                    x: (selectedPoints[0].x + selectedPoints[1].x) / 2,
-                    y: (selectedPoints[0].y + selectedPoints[1].y) / 2,
-                    text: 'Weight Drift: ' + dy.toFixed(6) + ' grams in ' + dx + ' seconds',
-                    showarrow: true,
-                    arrowhead: 3,
-                    ax: 0,
-                    ay: -40,
-                    bgcolor: "lightyellow",
-                    bordercolor: "black"
-                };
-
-                const line = {
-                    x: [selectedPoints[0].x, selectedPoints[1].x],
-                    y: [selectedPoints[0].y, selectedPoints[1].y],
+            const tracesToAdd = [
+                {
+                    x: [pt1.x, pt2.x],
+                    y: [pt1.y, pt2.y],
                     mode: 'lines',
                     line: { color: 'red', dash: 'dash' },
                     name: 'Slope Line'
-                };
-
-                const newPointTrace = {
-                    x: [selectedPoints[1].x],
-                    y: [selectedPoints[1].y],
+                },
+                {
+                    x: [pt1.x, pt2.x],
+                    y: [pt1.y, pt2.y],
                     mode: 'markers',
                     marker: { color: 'red', size: 10 },
-                    name: 'Selected Point'
-                };
+                    name: 'Selected Points'
+                }
+            ];
 
-                Plotly.addTraces('plot', [line, newPointTrace]);
-                Plotly.relayout('plot', { annotations: [annotation] });
+            Plotly.deleteTraces('plot', Array.from({length: plotDiv.data.length}, (_, i) => i).filter(i => plotDiv.data[i].name === 'Slope Line' || plotDiv.data[i].name === 'Selected Point' || plotDiv.data[i].name === 'Selected Points'));
+            Plotly.relayout('plot', { annotations: [] });
+            Plotly.addTraces('plot', tracesToAdd);
+            Plotly.relayout('plot', { annotations: [annotation] });
 
-                selectedPoints = [];
-            }
+            selectedPoints = [];
         }
-    });
+    }
+});
+
 });
 </script>
 """

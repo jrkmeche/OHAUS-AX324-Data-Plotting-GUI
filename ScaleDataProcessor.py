@@ -11,7 +11,8 @@ class ScaleDataProcessor:
             all_data.extend(self._process_single(path))
 
         df = pd.DataFrame(all_data)
-        df["timeRawSec"] = [i * 10 for i in range(len(df))]
+        df["timeRawSec"] = [i  for i in range(len(df))]
+        print(df["timeRawSec"])
         df["timeRawMin"] = (df["timeRawSec"] / 60).round(2)
         return df
 
