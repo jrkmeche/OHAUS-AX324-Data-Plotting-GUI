@@ -11,7 +11,7 @@ class DerivativePlotter:
         for file_name in self.df['SourceFile'].unique():
             df_subset = self.df[self.df['SourceFile'] == file_name].copy()
             df_subset = df_subset.reset_index(drop=True)
-            df_subset['AlignedTime'] = df_subset.index * 10
+            df_subset['AlignedTime'] = df_subset.index * 1
 
             fig.add_trace(go.Scatter(
                 x=df_subset['AlignedTime'],

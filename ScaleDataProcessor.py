@@ -15,7 +15,7 @@ class ScaleDataProcessor:
         print(df["timeRawSec"])
         df["timeRawMin"] = (df["timeRawSec"] / 60).round(2)
         return df
-
+            
     def _process_single(self, file_path):
         with open(file_path, 'r') as file:
             content = ''.join(file.readlines())
